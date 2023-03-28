@@ -125,7 +125,7 @@ While scanning speed is not the primary goal of udpy_proto_scanner, it is still 
 
 It's not as fast as nmap or massscan can be - but it IS designed to not make you wait too long for scan results.
 
-### Big Scan
+### Big Scans
 
 udpy_proto_scanner is designed to be able to scan large numbers of hosts - hundreds of thousands or even millions of hosts.
 
