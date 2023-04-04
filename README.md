@@ -15,7 +15,16 @@ List probe names using the -l option:
 ```
 $ udpy_proto_scanner.py -l
 The following probe names (-p argument) are available:
+* all
 * ike
+* echo
+* systat
+* daytime
+* chargen
+* time
+* net-support
+* gtpv1
+* l2tp
 * rpc
 * ntp
 * snmp-public
@@ -25,21 +34,54 @@ The following probe names (-p argument) are available:
 * tftp
 * db2
 * citrix
-* echo
-* chargen
-* systat
-* daytime
-* time
 * RPCCheck
-* DNSStatusRequest
 * DNSVersionBindReq
+* Help
 * NBTStat
-* NTPRequest
+* SNMPv1public
 * SNMPv3GetRequest
+* DNS-SD
+* DNSStatusRequest
+* SIPOptions
+* NTPRequest
+* AFSVersionRequest
+* Citrix
+* Kerberos
+* DTLSSessionReq
+* Sqlping
 * xdmcp
-* net-support
-* gtpv1
-* l2tp
+* QUIC
+* sybaseanywhere
+* NetMotionMobility
+* LDAPSearchReqUDP
+* ibm-db2-das-udp
+* SqueezeCenter
+* Quake2_status
+* Quake3_getstatus
+* serialnumberd
+* vuze-dht
+* pc-anywhere
+* pc-duo
+* pc-duo-gw
+* memcached
+* svrloc
+* ARD
+* Quake1_server_info
+* Quake3_master_getservers
+* BackOrifice
+* Murmur
+* Ventrilo
+* TeamSpeak2
+* TeamSpeak3
+* FreelancerStatus
+* ASE
+* AndroMouse
+* AirHID
+* OpenVPN
+* ipmi-rmcp
+* coap-request
+* UbiquitiDiscoveryv1
+* UbiquitiDiscoveryv2
 ```
 Targets files can be in CIDR format, or a range of IP addresses separated by a hyphen:
 ```
@@ -93,7 +135,7 @@ looking for specific UDP services.
 
 It's most efficient to run udpy_proto_scanner against whole networks (e.g.
 256 IPs or more).  If you run it against small numbers of hosts it will seem
-quite slow because it waits for 1 second between each different type of probe.
+quite slow because it waits between retries.
 
 ## Usage Message
 ```
@@ -104,10 +146,12 @@ options:
   -h, --help            show this help message and exit
   -f FILE, --file FILE  File of ips
   -p PROBE_NAME_STR_LIST, --probe_name PROBE_NAME_STR_LIST
-                        Name of probe or all
+                        Name of probe or "all". Default: all
   -l, --list_probes     List all available probe name then exit
   -b BANDWIDTH, --bandwidth BANDWIDTH
                         Bandwidth to use in bits/sec. Default 250k
+  -c COMMONNESS, --commonness COMMONNESS
+                        Commonness of probes to send 1-9. 9 is common, 1 is rare. Default 4
   -P PACKETRATE, --packetrate PACKETRATE
                         Max packets/sec to send. Default unlimited
   -H PACKEHOSTTRATE, --packethostrate PACKEHOSTTRATE
@@ -125,31 +169,56 @@ While scanning speed is not the primary goal of udpy_proto_scanner, it is still 
 
 It's not as fast as nmap or massscan can be - but it IS designed to not make you wait too long for scan results.
 
+One way to speed up scans is to only send probes for the most common UDP services; or to just probes for the services you're interested in:
+```
+udpy_proto_scanner.py -c 9 10.0.0.0/24  # Probe only the most common services - 7 in total
+udpy_proto_scanner.py -c 4 10.0.0.0/24  # -c 4 is the default and send 35 probes
+udpy_proto_scanner.py -c 1 10.0.0.0/24  # Send all probes including uncommon services - 105 in total
+udpy_proto_scanner.py -p NBTStat 10.0.0.0/24  # Send only one probe of interest: NBTStat
+```
+
+Another is to send fewer retries:
+```
+udpy_proto_scanner.py -r 2 10.0.0.0/24  # -r 2 is the default.  Each probe is sent 3 times.
+udpy_proto_scanner.py -r 0 10.0.0.0/24  # -r 0 is 3 times faster.  Each probe is sent once.
+```
+
+For small numbers of hosts, the -H parameter can be adjusted to increase speed.  This controls the number of times per second the same probe can be resent:
+```
+udpy_proto_scanner.py -p NBTStat -H 2 127.0.0.1 # Sends 3 probes, 0.5 seconds apart
+udpy_proto_scanner.py -p NBTStat -H 10 127.0.0.1 # Sends 3 probes, 0.1 seconds apart
+```
+
+Limits on the bandwidth used and packets per second are described below.  However, be cautious of setting these too high.
+
 ### Big Scans
 
 udpy_proto_scanner is designed to be able to scan large numbers of hosts - hundreds of thousands or even millions of hosts.
 
-It will scan a Class B network with one probe with no retries in about 85 seconds.
+It will scan a Class B network with one probe with no retries in about 65 seconds (for a small probe size):
+```
+udpy_proto_scanner.py -p echo -r 0 127.0.0.1/16
+```
 
 ### Safety
 
 When pentesting badly configured networks or fragile hosts, scanning can sometimes cause outages.  This tends to be rare, but udpy_proto_scanner aims to give testers ways to manage the risk of outages:
 * Specify maximum bandwidth in bits per section with -b or --bandwidth.  Example: `-b 1m` or `-b 32k`
 * Sensible default of 250Kbit/sec for maximum bandwidth
-* Specify maximum rate at which each host should be scanned in packets per second.  Example: `-H 5` will send up to 5 packets per second to each host.
-* Cautious default of 2 packets per second per host.  This is not as slow as it might seem: if your host-list is long, you can scan a lot of other hosts in 0.5 seconds, so efficiency is still high for large scans.
 * Option to specify the maximum packets per second the scanner will send.  Example `-P 3000` will send no more than 3000 pcakets per second.
+* Specify maximum rate at which a service should receive retry probes(*).  Example: `-H 5` will send up to 5 packets per second to each service. (*) Just be cautious that this rate can be exceeded if you send multiple probe types that apply tot he same port (e.g. ms-sql and ms-sql-slam both send to 1434/UDP - so that service will receive packets at double the rate specified by -H).
+* Cautious default of 2 packets per service for retries.  This is not as slow as it might seem: if your host-list is long, you can scan a lot of other hosts in 0.5 seconds, so efficiency is still high for large scans.
 
 If you choose to upload udpy_proto_scanner to a compromised host, so you can scan from there, the following may help to manage the risk of adversely affecting that host:
 * The script doesn't use forking or threading, which helps to manage the risk of accidentally swamping the target with processes or threads.
 * There is a maximum amount of memory that the script will use.  Even when hostlists are huge, the script will not read / generate the entire list in memory.  This helps to manage the risk that the script will consume all available memory.  udpy_proto_scanner will break scans up into chunks of around 100k hosts.
-* The code attempts to be efficient to keep CPU utilisation low.  If CPU utilisation is too high for you (and it generally shouldn't be high with the default settings), try scanning at a slower speed.
-* The program uses a single UDP socket to send all traffic from, so running the script should not exhaust the number of available sockets.
+* The code attempts to be efficient to keep CPU utilisation low.  If CPU utilisation is too high for you (and it generally shouldn't be high with the default settings), try scanning at a slower speed (-b).
+* The program uses a single UDP socket to send each probe type from.  This reduces the risk of exhausting the number of available sockets.  e.g. if you send 105 different probe types, you will use no more than 105 sockets.
 * No output is written to disk, so the script should not use up disk space unexpectedly.
 
 ### Verbose Output
 
-To aid pentesters with record keeping and answering detailed questions about their scans, udpy_proto_scanner outputs verbose information about scan time, scan rates and configuration.  It doesn't output to a file, though, so it's recommended you use `script' or output redirection capture output.
+To aid pentesters with record keeping and answering detailed questions about their scans, udpy_proto_scanner outputs verbose information about scan time, scan rates and configuration.  It doesn't output to a file, though, so it's recommended you use `script' or output redirection if you need to keep a record of your scan.
 
 ### Portable
 
