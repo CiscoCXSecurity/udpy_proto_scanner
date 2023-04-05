@@ -24,10 +24,12 @@
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 #
 
-# Max performance notes for python3:
-# * 18 seconds, 100% CPU, 22Mbit/s, send errors: time python3 udpy_proto_scanner.py -p echo -r 2 -b 24m 127.0.0.1/13
+# Max performance notes for python3 on linux:
+# * 19 seconds, 100% CPU, 22Mbit/s, send errors: time python3 udpy_proto_scanner.py -p echo -r 2 -b 24m 127.0.0.1/13
 # * 33 seconds, 8% CPU, 1Mbit/s, no send errors: time python3 udpy_proto_scanner.py -p echo -r 1 -b 1m 127.0.0.1/16
 # So for python3 1Mbit/s seems like a sensible maximum sending rate.  Default is 250Kbit/s.
+# Performance on Windows:
+# * 126 seconds, 12-100% CPU (varies), 500Kbit/s, no send errors: python udpy_proto_scanner.py -d -c 9 -b 500k -r0 -B 127.0.0.0 127.0.0.0/18
 
 # Profiling:
 #  python3 -m cProfile udpy_proto_scanner.py -p echo -r 2 -b 24m 127.0.0.1/13
@@ -41,7 +43,7 @@ import ipaddress
 from collections import deque
 from datetime import datetime, timedelta
 import socket
-from select import select # TODO not supported / doesn't work on windows?
+from select import select
 from math import log10, floor
 
 ip_regex = r"(?:(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])"
@@ -183,6 +185,10 @@ class ScannerUDP:
         self.host_count = 0
         self.next_recv_time = time.time()
         self.recv_interval = 0.1
+        self.debug = False
+        self.log_reply_tuples = []
+        self.debug_reply_log = "debug_reply_log.txt"
+        self.blocklist = []
 
     #
     # Setters
@@ -300,6 +306,9 @@ class ScannerUDP:
             if more_hosts and len(self.probe_states_queue) < self.host_count_low_water:
                 more_hosts = False # if complete the for loop, there are no more probes to add
                 for ps in probes_state_generator_function:
+                    if ps.target in self.blocklist:
+                        print("[i] Skipping target %s because it is in the blocklist" % ps.target)
+                        continue
                     self.probe_count += 1
                     if ps.probe_index == 0:
                         self.host_count += 1
@@ -313,7 +322,7 @@ class ScannerUDP:
                         # it will be difficult to match the replies to the probe.
                         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                         sock.setblocking(False)
-                        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) # TODO not needed?
 
                         self.probe_index_to_socket_dict[ps.probe_index] = sock
                     if len(self.probe_states_queue) >= self.host_count_high_water:
@@ -359,14 +368,20 @@ class ScannerUDP:
                                 port = self.get_probe_port(ps.probe_index)
 
                                 # For the last few probes, start noting the time we send the last probe.  For the stats.
-                                if more_hosts == 0 and ps.probes_sent == self.max_probes - 1:
+                                #if more_hosts == 0 and ps.probes_sent == self.max_probes - 1: # This doesn't work if we get a reply before we send the last probe
+                                if more_hosts == 0:
                                     last_send_time = time.time()
 
                                 try:
                                     sock.sendto(payload_bin, (ps.target, port))
                                     sent = True
                                 except socket.error as e:
-                                    print("[E] Sending too fast? Error sending probe to %s:%s: %s" % (ps.target, port, e))
+                                    # check if we're running on windows
+                                    if sys.platform == 'win32':
+                                        print("[E] Sending to network address on windows?  This is a fatal error on windows platforms.  Use -B to blocklist network addresses.  Error sending probe to %s:%s: %s" % (ps.target, port, e)) # TODO windows hits this error a lot when sending to network address
+                                        sys.exit(1)
+                                    else:
+                                        print("[W] Sending too fast?  Consider -b to slow scan down.  Error sending probe to %s:%s: %s" % (ps.target, port, e))
 
                             # Update stats
                             self.probes_sent_count += 1
@@ -394,7 +409,14 @@ class ScannerUDP:
 
         # self.scan_duration = time.time() - self.scan_start_time
         self.scan_duration = last_send_time - self.scan_start_time
+
+        # scan_duration can be 0 for quick scans on windows
+        if self.scan_duration == 0:
+            self.scan_duration = 0.001
         self.scan_rate_bits_per_second = int(8 * self.bytes_sent / self.scan_duration)
+
+        if self.debug:
+            self.debug_write_log()
 
     # returns True if we have more targets to probe; False if not
     def receive_packets(self, socket_list):
@@ -403,7 +425,12 @@ class ScannerUDP:
 
         # recv if there are
         for s in readable:
-            data, addr = s.recvfrom(1024)
+            data, addr = (None, None)
+            try:
+                data, addr = s.recvfrom(1024) #
+            except socket.error as e:
+                #print("[E] Error receiving packet: %s" % e)
+                continue
             srcip = addr[0]
             srcport = addr[1]
             socket_probe_index = self.get_probe_index_from_socket(s)
@@ -421,6 +448,8 @@ class ScannerUDP:
                     self.probe_states_queue.remove(probe_state)
                     found = True
                     self.replies += 1
+                    if self.debug:
+                        self.debug_log_reply(probe_name, srcip, port, data)
                     break
             if not found:
                 print("[W] Received unexpected to probe %s (target port %s) reply from %s:%s: %s" % (probe_name, port, srcip, srcport, str_or_bytes_to_hex(data)))
@@ -466,8 +495,31 @@ class ScannerUDP:
         return None
 
     def inform_starting_probe_type(self, probe_index):
-        print("Sending probe %s to targets on port %s..." % (self.get_probe_name(probe_index), self.get_probe_port(probe_index)))
+        print("[i] Sending probe %s to targets on port %s..." % (self.get_probe_name(probe_index), self.get_probe_port(probe_index)))
 
+    # Note that recording results in memory could use too much memory for large scans
+    # so is disabled by default.  This feature is used for automated testing.
+    def debug_log_reply(self, probe_name, srcip, port, data):
+        self.log_reply_tuples.append((probe_name, srcip, port, data))
+
+    def debug_write_log(self):
+        with open(self.debug_reply_log, "w") as f:
+            for probe_name, srcip, port, data in self.log_reply_tuples:
+                f.write("%s,%s,%s,%s\n" % (probe_name, srcip, port, str_or_bytes_to_hex(data)))
+        print("[i] Wrote debug log to %s" % self.debug_reply_log)
+
+    def set_debug(self, debug):
+        self.debug = debug
+
+    def set_blocklist(self, blocklist_ips):
+        # check ips are valid
+        for ip in blocklist_ips:
+            try:
+                socket.inet_aton(ip)
+            except socket.error:
+                print("[E] Invalid IP address in blocklist: %s" % ip)
+                sys.exit(1)
+        self.blocklist = blocklist_ips
 
 
 class TargetGenerator:
@@ -694,6 +746,7 @@ if __name__ == "__main__":
 
     probe_dict = {}                  # populated later with all possible probes from config above
     probe_names_selected = []        # from command line
+    blocklist_ips = []               # populated later with all ips in blocklist
 
     script_name = sys.argv[0]
 
@@ -709,6 +762,9 @@ if __name__ == "__main__":
     parser.add_argument('-H', '--packethostrate', dest='packehosttrate', default=DEFAULT_PACKET_HOST_RATE, type=int, help='Max packets/sec to each host.  Default %s' % (DEFAULT_PACKET_HOST_RATE))
     parser.add_argument('-R', '--rtt', dest='rtt', default=DEFAULT_RTT, type=str, help='Max round trip time for probe.  Default %ss' % (DEFAULT_RTT))
     parser.add_argument('-r', '--retries', dest='retries', default=DEFAULT_MAX_PROBES, type=int, help='No of packets to sent to each host.  Default %s' % (DEFAULT_MAX_PROBES))
+    parser.add_argument('-d', '--debug', dest='debug', action="store_true", help='Debug mode')
+    # get list of backlisted ip addresses that should not be probed
+    parser.add_argument('-B', '--blocklist', dest='blocklist', default=None, type=str, help='List of blacklisted ips.  Useful on windows to blocklist network addresses.  Separate with commas: 127.0.0.0,192.168.0.0.  Default None')
     args, targets = parser.parse_known_args()
 
     #
@@ -719,29 +775,33 @@ if __name__ == "__main__":
     if args.retries is not None:
         max_probes = args.retries + 1
 
-    # set default bandwidth
+    # set bandwidth
     if args.bandwidth is not None:
         bandwidth = args.bandwidth
 
-    # set default packet rate
+    # set packet rate
     if args.packetrate is not None:
         packet_rate = args.packetrate
 
-    # set default packet rate per host
+    # set packet rate per host
     if args.packehosttrate is not None:
         packet_rate_per_host = args.packehosttrate
 
-    # set default rtt
+    # set rtt
     if args.rtt is not None:
         rtt = args.rtt
 
-    # set default rarity
+    # set rarity
     if args.commonness is not None:
         rarity = 10 - args.commonness
 
-    # set default probe names
+    # set probe names
     if args.probe_name_str_list is not None:
         probe_names_selected = args.probe_name_str_list.split(',')
+
+    # set blocklist
+    if args.blocklist is not None:
+        blocklist_ips = args.blocklist.split(',')
 
     #
     # Parse probe data, probe options
@@ -797,6 +857,16 @@ if __name__ == "__main__":
                 if probe_dict[probe_name][port]["rarity"] <= rarity:
                     probes_to_use_tuple_list.append(probe_dict[probe_name][port]["config_tuple"])
 
+    # print a unique list of ports used by the probes - used by test-server to prove the scanner is working
+    if args.debug:
+        ports_used = []
+        for probe_name in probe_dict.keys():
+            for port in probe_dict[probe_name].keys():
+                if port not in ports_used:
+                    ports_used.append(port)
+        ports_used.sort()
+        print("[D] Using ports %s" % (ports_used))
+
     #
     # Check for illegal command line options
     #
@@ -846,6 +916,8 @@ if __name__ == "__main__":
     scanner.set_packet_rate(packet_rate)
     scanner.set_packet_rate_per_host(packet_rate_per_host)
     scanner.set_probes(probes_to_use_tuple_list)
+    scanner.set_debug(args.debug)
+    scanner.set_blocklist(blocklist_ips)
 
     # Start scan
     scanner.start_scan()
