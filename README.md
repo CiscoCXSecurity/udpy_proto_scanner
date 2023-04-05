@@ -222,7 +222,7 @@ To aid pentesters with record keeping and answering detailed questions about the
 
 ### Portable
 
-The script was designed to work with python2 and python3 (but so far has only been tested with 2.7.18 and 3.10.8) because you can't be sure how old a version of python you're going to find on a compromised host.
+The script was designed to work with python2 and python3 (but so far has only been tested with 2.7.18 and 3.10.8 on Linux and 3.10.10 on Windows 10) because you can't be sure how old a version of python you're going to find on a compromised host.
 
 The script has no dependencies and should work with a base python install.
 
