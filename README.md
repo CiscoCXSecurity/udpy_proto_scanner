@@ -230,7 +230,7 @@ You should be able to copy-paste the .py file and run it.  All probe data is in 
 
 Note: No consideration is given to opsec.
 
-Note: No testing has been carried out on Windows yet.  But apparently the implemention of select() differs on Windows, so this may stop it working.
+Note: Cursory testing has been carried out on Windows.  It seems to work, but CPU utilisation seems a lot higher.  On Windows, the code cannot currently handle sending to the network address (e.g. 127.0.0.0), so use the -B option to blocklist any network addresses in your target list.  You'll get a useful error if you don't and the scan will abort.
 
 ### Reliability
 
