@@ -175,7 +175,6 @@ class ScannerUDP:
         self.host_count_high_water = 100000
         self.host_count_low_water = 90000
         self.scan_start_time = None
-        self.probe_count = 0
         self.probes_sent_count = 0
         self.replies = 0
         self.unexpected_replies = 0
@@ -189,6 +188,7 @@ class ScannerUDP:
         self.log_reply_tuples = []
         self.debug_reply_log = "debug_reply_log.txt"
         self.blocklist = []
+        self.count_in_queue = {} # how many probes are in the queue for each probe type
 
     #
     # Setters
@@ -288,6 +288,10 @@ class ScannerUDP:
             sys.exit(0)
         probes_state_generator_function = target_generator.get_probe_state_generator(self.probes)
 
+        # Initialize stats for how many of each probe type are in the queue
+        for probe_index in range(len(self.probes)):
+            self.count_in_queue[probe_index] = 0
+
         last_send_time = None
 
         # TODO
@@ -300,34 +304,48 @@ class ScannerUDP:
         self.scan_start_time = time.time()
         scan_running = True
         more_hosts = True
-        highest_probe_index_seen = 0
+        highest_probe_index_seen = -1
         while scan_running:
+            # add probes to queue
             # if queue has capacity, create more probestate objects for up to host_count_high_water hosts; add them to queue
             if more_hosts and len(self.probe_states_queue) < self.host_count_low_water:
-                more_hosts = False # if complete the for loop, there are no more probes to add
+                more_hosts = False # if we complete the for loop, there are no more probes to add
                 for ps in probes_state_generator_function:
+                    # Don't add to queue if target is in blocklist
                     if ps.target in self.blocklist:
                         print("[i] Skipping target %s because it is in the blocklist" % ps.target)
                         continue
-                    self.probe_count += 1
+
+                    # Count the number of hosts we are scanning
                     if ps.probe_index == 0:
                         self.host_count += 1
+
+                    # Inform user went we start scanning a new probe type
                     if ps.probe_index > highest_probe_index_seen:
-                        self.inform_starting_probe_type(highest_probe_index_seen)
+                        self.inform_starting_probe_type(ps.probe_index)
                         highest_probe_index_seen = ps.probe_index
+
+                    # Add to queue
                     self.probe_states_queue.append(ps)
+
+                    # Increment count of probes of this type in queue
+                    self.count_in_queue[ps.probe_index] += 1
+
+                    # Create socket if needed
                     if ps.probe_index not in self.probe_index_to_socket_dict:
                         # Create socket to send packets from.  All probes of the same type are sent from same source port.
                         # We don't use the same source port for all probes because if we have two DNS probes (for example)
                         # it will be difficult to match the replies to the probe.
                         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                         sock.setblocking(False)
-                        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) # TODO not needed?
-
                         self.probe_index_to_socket_dict[ps.probe_index] = sock
+
+                    # If we've reached the high water mark, exit the for loop
                     if len(self.probe_states_queue) >= self.host_count_high_water:
-                        # If we exist the for loop early, there are more probes to add
+                        # If we exit the for loop early, there are more probes to add
                         more_hosts = True
+                        if self.debug:
+                            print("[D] Queue stats (after queue filled): %s" % self.count_in_queue)
                         break
 
             # check if we've exceeded bandwidth or packet rate quotas
@@ -348,7 +366,11 @@ class ScannerUDP:
                     if ps.probes_sent >= self.max_probes:
                         if time.time() > ps.probe_sent_time + self.rtt:
                             # We've sent max probes to this host and we're past the RTT window, so we're done with this host
-                            pass  # we don't add this host back to the queue
+                            # we don't add this host back to the queue
+
+                            # Decrement count of probes of this type in queue
+                            self.decrease_count_in_queue(ps.probe_index)
+
                         else:
                             self.probe_states_queue.append(ps)  # add back to queue, but don't send more probes to this host
 
@@ -362,8 +384,6 @@ class ScannerUDP:
                             sent = False
                             payload_bin = self.get_probe_payload_bin(ps.probe_index)
                             while not sent:
-                                # At around 16Mbit/s we get occassional errors on sendto: PermissionError: [Errno 1] Operation not permitted
-                                # so we catch these errors and retry
                                 sock = self.probe_index_to_socket_dict[ps.probe_index]
                                 port = self.get_probe_port(ps.probe_index)
 
@@ -372,13 +392,15 @@ class ScannerUDP:
                                 if more_hosts == 0:
                                     last_send_time = time.time()
 
+                                # At around 16Mbit/s we get occassional errors on sendto: PermissionError: [Errno 1] Operation not permitted
+                                # so we catch these errors and retry
                                 try:
                                     sock.sendto(payload_bin, (ps.target, port))
                                     sent = True
                                 except socket.error as e:
                                     # check if we're running on windows
                                     if sys.platform == 'win32':
-                                        print("[E] Sending to network address on windows?  This is a fatal error on windows platforms.  Use -B to blocklist network addresses.  Error sending probe to %s:%s: %s" % (ps.target, port, e)) # TODO windows hits this error a lot when sending to network address
+                                        print("[E] Sending to network address on windows?  This is a fatal error on windows platforms.  Use -B to blocklist network addresses.  Error sending probe to %s:%s: %s" % (ps.target, port, e))
                                         sys.exit(1)
                                     else:
                                         print("[W] Sending too fast?  Consider -b to slow scan down.  Error sending probe to %s:%s: %s" % (ps.target, port, e))
@@ -399,7 +421,7 @@ class ScannerUDP:
             # for efficiency we only receive after every 10 packets sent, or if we're past the next recv time
             # whichever is sooner
             now = time.time()
-            if self.probe_count % 10 == 0 or self.next_recv_time < now:
+            if self.probes_sent_count % 10 == 0 or self.next_recv_time < now:
                 self.next_recv_time = now + self.recv_interval
                 scan_running = self.receive_packets(self.get_socket_list())
 
@@ -415,11 +437,17 @@ class ScannerUDP:
             self.scan_duration = 0.001
         self.scan_rate_bits_per_second = int(8 * self.bytes_sent / self.scan_duration)
 
+
         if self.debug:
+            print("[D] Final Queue stats: %s" % self.count_in_queue)
             self.debug_write_log()
 
     # returns True if we have more targets to probe; False if not
     def receive_packets(self, socket_list):
+        # return if socket_list is empty
+        if len(socket_list) == 0:
+            return False
+
         # check if there are any packets to receive
         readable, _, _ = select(socket_list, [], [], 0)
 
@@ -446,6 +474,7 @@ class ScannerUDP:
                 if socket_probe_index == probe_state.probe_index and probe_state.target == srcip and port == srcport:
                     print("Received reply to probe %s (target port %s) from %s:%s: %s" % (probe_name, port, srcip, srcport, str_or_bytes_to_hex(data)))
                     self.probe_states_queue.remove(probe_state)
+                    self.decrease_count_in_queue(probe_state.probe_index)
                     found = True
                     self.replies += 1
                     if self.debug:
@@ -483,10 +512,7 @@ class ScannerUDP:
         return probe[1]
 
     def get_socket_list(self):
-        for probe_index in range(len(self.probes)):
-            if probe_index in self.probe_index_to_socket_dict.keys():
-                yield self.probe_index_to_socket_dict[probe_index]
-        #return [self.probe_index_to_socket_dict[probe_index] if probe_index in self.probe_index_to_socket_dict.keys() ]
+        return list(self.probe_index_to_socket_dict.values())
 
     def get_probe_index_from_socket(self, s):
         for probe_index, socket in self.probe_index_to_socket_dict.items():
@@ -521,6 +547,17 @@ class ScannerUDP:
                 sys.exit(1)
         self.blocklist = blocklist_ips
 
+    def decrease_count_in_queue(self, probe_index):
+        self.count_in_queue[probe_index] -= 1
+        if self.count_in_queue[probe_index] == 0:
+            self.close_socket_for_probe_index(probe_index)
+
+    def close_socket_for_probe_index(self, probe_index):
+        socket = self.probe_index_to_socket_dict[probe_index]
+        if self.debug:
+            print("[D] Closing socket for probe index %s (%s on port %s)" % (probe_index, self.get_probe_name(probe_index), self.get_probe_port(probe_index)))
+        socket.close()
+        del self.probe_index_to_socket_dict[probe_index]
 
 class TargetGenerator:
     def __init__(self, list=None, filename=None):
@@ -662,7 +699,15 @@ def str_or_bytes_to_hex(str_or_bytes):
     return "".join("{:02x}".format(c if type(c) is int else ord(c)) for c in str_or_bytes)
 
 def get_time():
-    return datetime.now().isoformat() # TODO timezone
+    offset = time.timezone
+    if time.localtime().tm_isdst:
+        offset = time.altzone
+    offset = int(offset / 60 / 60 * -1)
+    if offset > 0:
+        offset = "+" + str(offset)
+    else:
+        offset = str(offset)
+    return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()) + " UTC" + offset
 
 def round_pretty(x):
     # avoid math errors
@@ -725,7 +770,7 @@ def expand_port_list(ports):
     return ports_list
 
 if __name__ == "__main__":
-    VERSION = "0.9"
+    VERSION = "0.9.1"
 
     # Defaults
     DEFAULT_MAX_PROBES = 2
