@@ -139,10 +139,10 @@ quite slow because it waits between retries.
 
 ## Usage Message
 ```
-usage: ./udpy_proto_scanner.py [options] [ -p probe_name ] -f ipsfile
-       ./udpy_proto_scanner.py [options] [ -p probe_name ] 10.0.0.0/16 10.1.0.0-10.1.1.9 192.168.0.1
+usage: udpy_proto_scanner.py [options] [ -p probe_name ] -f ipsfile
+       udpy_proto_scanner.py [options] [ -p probe_name ] 10.0.0.0/16 10.1.0.0-10.1.1.9 192.168.0.1
 
-options:
+optional arguments:
   -h, --help            show this help message and exit
   -f FILE, --file FILE  File of ips
   -p PROBE_NAME_STR_LIST, --probe_name PROBE_NAME_STR_LIST
@@ -151,7 +151,8 @@ options:
   -b BANDWIDTH, --bandwidth BANDWIDTH
                         Bandwidth to use in bits/sec. Default 250k
   -c COMMONNESS, --commonness COMMONNESS
-                        Commonness of probes to send 1-9. 9 is common, 1 is rare. Default 4
+                        Commonness of probes to send 1-9. 9 is common, 1 is
+                        rare. Default 4
   -P PACKETRATE, --packetrate PACKETRATE
                         Max packets/sec to send. Default unlimited
   -H PACKEHOSTTRATE, --packethostrate PACKEHOSTTRATE
@@ -159,6 +160,11 @@ options:
   -R RTT, --rtt RTT     Max round trip time for probe. Default 1s
   -r RETRIES, --retries RETRIES
                         No of packets to sent to each host. Default 2
+  -d, --debug           Debug mode
+  -B BLOCKLIST, --blocklist BLOCKLIST
+                        List of blacklisted ips. Useful on windows to
+                        blocklist network addresses. Separate with commas:
+                        127.0.0.0,192.168.0.0. Default None
 ```
 
 ## Features and Design Goals
