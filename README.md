@@ -196,7 +196,7 @@ Limits on the bandwidth used and packets per second are described below.  Howeve
 
 udpy_proto_scanner is designed to be able to scan large numbers of hosts - hundreds of thousands or even millions of hosts.
 
-It will scan a Class B network with one probe with no retries in about 65 seconds (for a small probe size):
+It will scan a Class B network with one probe with no retries in about 95 seconds (for a small probe size):
 ```
 udpy_proto_scanner.py -p echo -r 0 127.0.0.1/16
 ```
@@ -208,7 +208,7 @@ When pentesting badly configured networks or fragile hosts, scanning can sometim
 * Sensible default of 250Kbit/sec for maximum bandwidth
 * Option to specify the maximum packets per second the scanner will send.  Example `-P 3000` will send no more than 3000 packets per second.
 * Specify maximum rate at which a service should receive retry probes(*).  Example: `-H 5` will send up to 5 packets per second to each service. (*) Just be cautious that this rate can be exceeded if you send multiple probe types that apply to the same port (e.g. ms-sql and ms-sql-slam both send to 1434/UDP - so that service will receive packets at double the rate specified by -H).
-* Cautious default of 2 packets per service for retries.  This is not as slow as it might seem: if your host-list is long, you can scan a lot of other hosts in 0.5 seconds, so efficiency is still high for large scans.
+* Cautious default of 2 packets per service for retries.  This is not as slow as it might seem: if your host list is long, you can scan a lot of other hosts in 0.5 seconds, so efficiency is still high for large scans.
 
 If you choose to upload udpy_proto_scanner to a compromised host, so you can scan from there, the following may help to manage the risk of adversely affecting that host:
 * The script doesn't use forking or threading, which helps to manage the risk of accidentally swamping the target with processes or threads.
