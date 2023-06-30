@@ -148,7 +148,7 @@ optional arguments:
                         Bandwidth to use in bits/sec. Default 250k
   -c COMMONNESS, --commonness COMMONNESS
                         Commonness of probes to send 1-9. 9 is common, 1 is
-                        rare. Default 4
+                        rare.   Implies -p all.  Default 4
   -P PACKETRATE, --packetrate PACKETRATE
                         Max packets/sec to send. Default unlimited
   -H RETRYRATE, --retryrate RETRYRATE
