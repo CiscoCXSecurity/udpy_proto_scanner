@@ -1,6 +1,6 @@
 # UDP Protocol Scanner
 
-A tool for identifying UDP services running on remote hosts.  This tool may be of use to those performing security testing - e.g. during penetration testing, vulnerability assessment or while pivoting.
+A tool for identifying UDP services running on remote hosts.  This tool may be of use to those performing security testing - e.g. during penetration testing, vulnerability assessments or while pivoting.
 
 This is python version of https://github.com/CiscoCXSecurity/udp-proto-scanner (which is written in Perl).
 
