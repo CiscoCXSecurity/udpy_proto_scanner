@@ -167,9 +167,7 @@ optional arguments:
 
 ### Speed
 
-While scanning speed is not the primary goal of udpy_proto_scanner, it is still important.  udpy_proto_scanner is designed to be fast as it could easily be made to be given that it's coded in python.
-
-It's not as fast as nmap or massscan can be - but it IS designed to not make you wait too long for scan results.
+While scanning speed is not the primary goal of udpy_proto_scanner, it IS designed to not make you wait too long for scan results.  udpy_proto_scanner is designed to be fast as it could easily be made to be given that it's coded in python.
 
 One way to speed up scans is to only send probes for the most common UDP services; or to just probes for the services you're interested in:
 ```
