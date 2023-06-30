@@ -151,8 +151,9 @@ optional arguments:
                         rare. Default 4
   -P PACKETRATE, --packetrate PACKETRATE
                         Max packets/sec to send. Default unlimited
-  -H PACKEHOSTTRATE, --packethostrate PACKEHOSTTRATE
-                        Max packets/sec to each host. Default 2
+  -H RETRYRATE, --retryrate RETRYRATE
+                        Max rate (packets/sec) for retrying the same probe.
+                        Default 2
   -R RTT, --rtt RTT     Max round trip time for probe. Default 1s
   -r RETRIES, --retries RETRIES
                         No of packets to sent to each host. Default 2
