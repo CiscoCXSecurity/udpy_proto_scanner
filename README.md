@@ -128,7 +128,7 @@ discovered, e.g.:
 It can sometimes be useful to upload udpy_proto_scanner.py to a compromised 
 host and run scans from there.
 
-## udpy_proto_scan is not a Port Scanner
+## udpy_proto_scanner is not a Port Scanner
 
 It won't give you a list of open and closed ports for each host.  It's simply
 looking for specific UDP services.
