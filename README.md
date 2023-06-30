@@ -1,6 +1,8 @@
 # UDP Protocol Scanner
 
-A python version of https://github.com/CiscoCXSecurity/udp-proto-scanner (which is written in Perl).
+A tool for identifying UDP services running on remote hosts.  This tool may be of use to those performing security testing - e.g. during penetration testing, vulnerability assessment or while pivoting.
+
+This is python version of https://github.com/CiscoCXSecurity/udp-proto-scanner (which is written in Perl).
 
 # Quick Start
 
@@ -211,13 +213,13 @@ udpy_proto_scanner.py -p echo -r 0 127.0.0.1/16
 When pentesting badly configured networks or fragile hosts, scanning can sometimes cause outages.  This tends to be rare, but udpy_proto_scanner aims to give testers ways to manage the risk of outages:
 * Specify maximum bandwidth in bits per section with -b or --bandwidth.  Example: `-b 1m` or `-b 32k`
 * Sensible default of 250Kbit/sec for maximum bandwidth
-* Option to specify the maximum packets per second the scanner will send.  Example `-P 3000` will send no more than 3000 pcakets per second.
+* Option to specify the maximum packets per second the scanner will send.  Example `-P 3000` will send no more than 3000 packets per second.
 * Specify maximum rate at which a service should receive retry probes(*).  Example: `-H 5` will send up to 5 packets per second to each service. (*) Just be cautious that this rate can be exceeded if you send multiple probe types that apply tot he same port (e.g. ms-sql and ms-sql-slam both send to 1434/UDP - so that service will receive packets at double the rate specified by -H).
 * Cautious default of 2 packets per service for retries.  This is not as slow as it might seem: if your host-list is long, you can scan a lot of other hosts in 0.5 seconds, so efficiency is still high for large scans.
 
 If you choose to upload udpy_proto_scanner to a compromised host, so you can scan from there, the following may help to manage the risk of adversely affecting that host:
 * The script doesn't use forking or threading, which helps to manage the risk of accidentally swamping the target with processes or threads.
-* There is a maximum amount of memory that the script will use.  Even when hostlists are huge, the script will not read / generate the entire list in memory.  This helps to manage the risk that the script will consume all available memory.  udpy_proto_scanner will break scans up into chunks of around 100k hosts.
+* There is a maximum amount of memory that the script will use.  Even when host lists are huge, the script will not read / generate the entire list in memory.  This helps to manage the risk that the script will consume all available memory.  udpy_proto_scanner will break scans up into chunks of around 100k hosts.
 * The code attempts to be efficient to keep CPU utilisation low.  If CPU utilisation is too high for you (and it generally shouldn't be high with the default settings), try scanning at a slower speed (-b).
 * The program uses a single UDP socket to send each probe type from.  This reduces the risk of exhausting the number of available sockets.  e.g. if you send 105 different probe types, you will use no more than 105 sockets.
 * No output is written to disk, so the script should not use up disk space unexpectedly.
@@ -242,7 +244,7 @@ Note: Cursory testing has been carried out on Windows.  It seems to work, but CP
 
 Retries are supported and enabled by default in case any probes are dropped on their way to the target.  Example: `-r 2` will send a probe and then 2 retries (3 packets to each host in total).
 
-Scanning time is predictable.  The time taken for scans should depend only on the paramaters used and the length of the host list.  If networks are congested or hosts are slow to responsd or there's some sort of a rate-limiting with replies, this will not affect scan time - although it could mean that you should scan at a lower rate.  This is a feature, not a bug so that pentesters are not left wondering if their scan their scan will ever finish.
+Scanning time is predictable.  The time taken for scans should depend only on the parameters used and the length of the host list.  If networks are congested or hosts are slow to respond or there's some sort of rate-limiting with replies, this will not affect scan time - although it could mean that you should scan at a lower rate.  This is a feature, not a bug so that pentesters are not left wondering if their scan their scan will ever finish.
 
 Suitable for testing over slow links.  udpy_proto_scanner will wait 1 second by default for replies.  You can wait longer using RTT option: `-R 2.5`
 
