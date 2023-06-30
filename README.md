@@ -105,7 +105,7 @@ $ cat ips.txt
 127.0.2.128/30
 ```
 
-## What is udpy_proto_scan used for?
+## What is udpy_proto_scanner used for?
 
 It's used in the host-discovery and service-discovery phases of a pentest.
 It can be helpful if you need to discover hosts that only offer UDP services
