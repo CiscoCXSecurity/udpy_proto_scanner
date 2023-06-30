@@ -133,12 +133,6 @@ host and run scans from there.
 It won't give you a list of open and closed ports for each host.  It's simply
 looking for specific UDP services.
 
-## Efficiency
-
-It's most efficient to run udpy_proto_scanner against whole networks (e.g.
-256 IPs or more).  If you run it against small numbers of hosts it will seem
-quite slow because it waits between retries.
-
 ## Usage Message
 ```
 usage: udpy_proto_scanner.py [options] [ -p probe_name ] -f ipsfile
