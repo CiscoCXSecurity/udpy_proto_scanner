@@ -1135,9 +1135,9 @@ if __name__ == "__main__":
     parser.add_argument('-p', '--probe_name', dest='probe_name_str_list', default=DEFAULT_PROBES, type=str, help='Name of probe or "all".  Default: %s' % (DEFAULT_PROBES))
     parser.add_argument('-l', '--list_probes', dest='list_probes', action="store_true", help='List all available probe name then exit')
     parser.add_argument('-b', '--bandwidth', dest='bandwidth', default=DEFAULT_BANDWIDTH, type=str, help='Bandwidth to use in bits/sec.  Default %s' % (DEFAULT_BANDWIDTH))
-    parser.add_argument('-c', '--commonness', dest='commonness', default=10-DEFAULT_RARITY, type=int, help='Commonness of probes to send 1-9.  9 is common, 1 is rare.  Default %s' % (10-DEFAULT_RARITY))
+    parser.add_argument('-c', '--commonness', dest='commonness', default=argparse.SUPPRESS, type=int, help='Commonness of probes to send 1-9.  9 is common, 1 is rare.  Implies -p all.  Default %s' % (10-DEFAULT_RARITY))
     parser.add_argument('-P', '--packetrate', dest='packetrate', default=DEFAULT_PACKET_RATE, type=str, help='Max packets/sec to send.  Default unlimited')
-    parser.add_argument('-H', '--packethostrate', dest='packehosttrate', default=DEFAULT_PACKET_HOST_RATE, type=int, help='Max packets/sec to each host.  Default %s' % (DEFAULT_PACKET_HOST_RATE))
+    parser.add_argument('-H', '--retryrate', dest='packehosttrate', default=DEFAULT_PACKET_HOST_RATE, type=int, help='Max rate (packets/sec) for retrying the same probe.  Default %s' % (DEFAULT_PACKET_HOST_RATE))
     parser.add_argument('-R', '--rtt', dest='rtt', default=DEFAULT_RTT, type=str, help='Max round trip time for probe.  Default %ss' % (DEFAULT_RTT))
     parser.add_argument('-r', '--retries', dest='retries', default=DEFAULT_MAX_PROBES, type=int, help='No of packets to sent to each host.  Default %s' % (DEFAULT_MAX_PROBES))
     parser.add_argument('-d', '--debug', dest='debug', action="store_true", help='Debug mode')
@@ -1168,13 +1168,17 @@ if __name__ == "__main__":
     if args.rtt is not None:
         rtt = args.rtt
 
-    # set rarity
-    if args.commonness is not None:
-        rarity = 10 - args.commonness
-
     # set probe names
     if args.probe_name_str_list is not None:
         probe_names_selected = args.probe_name_str_list.split(',')
+
+    # set rarity
+    if 'commonness' in args:
+        rarity = 10 - args.commonness
+        if "all" not in probe_names_selected:
+            probe_names_selected.append("all")
+    else:
+        rarity = DEFAULT_RARITY
 
     # set blocklist
     if args.blocklist is not None:
@@ -1229,8 +1233,14 @@ if __name__ == "__main__":
 
     # Iterate over probe_dict and select required probes, adding them to probe_names and probe_tuples_list
     for probe_name in probe_dict.keys():
-        if probe_name in probe_names_selected or "all" in probe_names_selected:
+        if probe_name in probe_names_selected:
+            # Add regardless of rarity
             for port in probe_dict[probe_name].keys():
+                probes_to_use_tuple_list.append(probe_dict[probe_name][port]["config_tuple"])
+
+        if "all" in probe_names_selected:
+            for port in probe_dict[probe_name].keys():
+                # Add if rarity matches
                 if probe_dict[probe_name][port]["rarity"] <= rarity:
                     probes_to_use_tuple_list.append(probe_dict[probe_name][port]["config_tuple"])
 
