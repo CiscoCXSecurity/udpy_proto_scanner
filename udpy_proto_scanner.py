@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # udpy_proto_scanner - UDP Service Discovery Tool
-# Copyright (C) 2023  Mark Lowe
+# Copyright Cisco Systems, Inc. and its affiliates
 #
 # This tool may be used for legal purposes only.  Users take full responsibility
 # for any actions performed using this tool.  The author accepts no liability
